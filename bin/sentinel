@@ -1,0 +1,144 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+$LOAD_PATH.unshift File.join(__dir__, '..', 'lib')
+
+require 'dotenv/load'
+require 'thor'
+require 'pastel'
+require 'tty-spinner'
+require 'audit/entitlement_auditor'
+require 'audit/ssh_key_auditor'
+require 'rbac/policy_engine'
+require 'reports/report_generator'
+
+module SentinelIAM
+  class CLI < Thor
+    class_option :org, type: :string, desc: 'GitHub Organization name', required: true
+    class_option :token, type: :string, desc: 'GitHub Personal Access Token (or set GITHUB_TOKEN env var)'
+    class_option :output, type: :string, default: 'table', enum: %w[table json csv], desc: 'Output format'
+
+    desc 'audit', 'Run full IAM audit (entitlements + SSH keys)'
+    option :stale_days, type: :numeric, default: 90, desc: 'Days threshold for stale access'
+    def audit
+      spinner = TTY::Spinner.new("[:spinner] Running full IAM audit for :org ...", format: :dots)
+      spinner.update(org: options[:org])
+      spinner.auto_spin
+
+      client = build_client
+      auditor = Audit::EntitlementAuditor.new(client, options[:org])
+      ssh_auditor = Audit::SSHKeyAuditor.new(client, options[:org])
+
+      results = auditor.run(stale_days: options[:stale_days])
+      ssh_results = ssh_auditor.run(stale_days: options[:stale_days])
+
+      spinner.success(pastel.green('Done!'))
+
+      reporter = Reports::ReportGenerator.new(options[:org])
+      reporter.render_entitlements(results, format: options[:output])
+      reporter.render_ssh_keys(ssh_results, format: options[:output])
+      reporter.save_report(results.merge(ssh_keys: ssh_results))
+    rescue Octokit::Unauthorized
+      spinner.error(pastel.red('Auth failed'))
+      puts pastel.red("ERROR: Invalid GitHub token. Check GITHUB_TOKEN or --token flag.")
+      exit 1
+    end
+
+    desc 'entitlements', 'Audit organization member entitlements and over-privileged users'
+    option :stale_days, type: :numeric, default: 90, desc: 'Days threshold for stale access'
+    option :show_all, type: :boolean, default: false, desc: 'Show all members, not just over-privileged'
+    def entitlements
+      spinner = TTY::Spinner.new("[:spinner] Auditing entitlements...", format: :dots)
+      spinner.auto_spin
+
+      client = build_client
+      auditor = Audit::EntitlementAuditor.new(client, options[:org])
+      results = auditor.run(stale_days: options[:stale_days])
+
+      spinner.success(pastel.green('Done!'))
+
+      reporter = Reports::ReportGenerator.new(options[:org])
+      reporter.render_entitlements(results, format: options[:output], show_all: options[:show_all])
+    end
+
+    desc 'ssh_keys', 'Identify stale SSH keys across organization members'
+    option :stale_days, type: :numeric, default: 365, desc: 'Days threshold for stale SSH keys'
+    def ssh_keys
+      spinner = TTY::Spinner.new("[:spinner] Scanning SSH keys...", format: :dots)
+      spinner.auto_spin
+
+      client = build_client
+      auditor = Audit::SSHKeyAuditor.new(client, options[:org])
+      results = auditor.run(stale_days: options[:stale_days])
+
+      spinner.success(pastel.green('Done!'))
+
+      reporter = Reports::ReportGenerator.new(options[:org])
+      reporter.render_ssh_keys(results, format: options[:output])
+    end
+
+    desc 'access_review', 'Run quarterly access review and generate compliance report'
+    option :framework, type: :string, default: 'SOC2', enum: %w[SOC2 ISO27001 HIPAA], desc: 'Compliance framework'
+    option :quarter, type: :string, desc: 'Quarter (e.g. Q1-2025), defaults to current'
+    def access_review
+      quarter = options[:quarter] || current_quarter
+      spinner = TTY::Spinner.new("[:spinner] Running #{options[:framework]} access review for #{quarter}...", format: :dots)
+      spinner.auto_spin
+
+      client = build_client
+      auditor = Audit::EntitlementAuditor.new(client, options[:org])
+      ssh_auditor = Audit::SSHKeyAuditor.new(client, options[:org])
+      policy_engine = RBAC::PolicyEngine.new
+
+      entitlements = auditor.run(stale_days: 90)
+      ssh_results = ssh_auditor.run(stale_days: 365)
+      policy_violations = policy_engine.evaluate(entitlements)
+
+      spinner.success(pastel.green('Done!'))
+
+      reporter = Reports::ReportGenerator.new(options[:org])
+      report_path = reporter.generate_compliance_report(
+        entitlements: entitlements,
+        ssh_results: ssh_results,
+        violations: policy_violations,
+        framework: options[:framework],
+        quarter: quarter
+      )
+
+      puts pastel.green("\n✓ Compliance report saved to: #{report_path}")
+    end
+
+    desc 'dashboard', 'Launch the Sinatra web dashboard'
+    option :port, type: :numeric, default: 4567, desc: 'Port to run dashboard on'
+    def dashboard
+      puts pastel.cyan("Launching Sentinel-IAM Dashboard on http://localhost:#{options[:port]}")
+      require_relative '../dashboard/app'
+      SentinelIAM::Dashboard::App.run!(port: options[:port], org: options[:org])
+    end
+
+    private
+
+    def build_client
+      token = options[:token] || ENV['GITHUB_TOKEN']
+      raise Thor::Error, "GitHub token required. Set GITHUB_TOKEN or use --token flag." unless token
+
+      Octokit::Client.new(
+        access_token: token,
+        auto_paginate: true,
+        per_page: 100
+      )
+    end
+
+    def pastel
+      @pastel ||= Pastel.new
+    end
+
+    def current_quarter
+      month = Time.now.month
+      q = ((month - 1) / 3) + 1
+      "Q#{q}-#{Time.now.year}"
+    end
+  end
+end
+
+SentinelIAM::CLI.start(ARGV)

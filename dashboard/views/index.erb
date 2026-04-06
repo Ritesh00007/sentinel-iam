@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sentinel-IAM | Access Governance Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0a0c10;
+      --surface: #111318;
+      --surface2: #181c24;
+      --border: #1e2330;
+      --accent: #00e5ff;
+      --accent2: #7c3aed;
+      --danger: #ef4444;
+      --warn: #f59e0b;
+      --ok: #10b981;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --critical: #ef4444;
+      --high: #f97316;
+      --medium: #f59e0b;
+      --low: #10b981;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Syne', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .shell { position: relative; z-index: 1; }
+
+    /* Header */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 32px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(10,12,16,0.8);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .logo-text {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+
+    .logo-text span { color: var(--accent); }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .org-input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+    }
+
+    .org-input-wrap input {
+      background: none;
+      border: none;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      outline: none;
+      width: 180px;
+    }
+
+    .org-input-wrap input::placeholder { color: var(--muted); }
+
+    .btn {
+      padding: 9px 18px;
+      border-radius: 8px;
+      border: none;
+      font-family: 'Syne', sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+    }
+
+    .btn-primary:hover { opacity: 0.85; transform: translateY(-1px); }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.3s;
+    }
+
+    .status-dot.live { background: var(--ok); box-shadow: 0 0 8px var(--ok); animation: pulse 2s infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Main layout */
+    main { padding: 32px; max-width: 1600px; margin: 0 auto; }
+
+    /* Score hero */
+    .score-hero {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 24px;
+      margin-bottom: 28px;
+    }
+
+    .score-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .score-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at center, rgba(0,229,255,0.05) 0%, transparent 70%);
+    }
+
+    .score-ring {
+      position: relative;
+      width: 140px;
+      height: 140px;
+      margin-bottom: 16px;
+    }
+
+    .score-ring svg { transform: rotate(-90deg); }
+
+    .score-ring-bg { fill: none; stroke: var(--border); stroke-width: 8; }
+    .score-ring-fill { fill: none; stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset 1s ease; }
+
+    .score-center {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .score-number {
+      font-size: 36px;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+      line-height: 1;
+    }
+
+    .score-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+    .score-title { font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+
+    /* Summary stat grid */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+
+    .stat-card:hover { border-color: var(--accent); }
+
+    .stat-card::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+    }
+
+    .stat-card.danger::after { background: var(--danger); }
+    .stat-card.warn::after { background: var(--warn); }
+    .stat-card.ok::after { background: var(--ok); }
+    .stat-card.info::after { background: var(--accent); }
+
+    .stat-value {
+      font-size: 40px;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+
+    .stat-card.danger .stat-value { color: var(--danger); }
+    .stat-card.warn .stat-value { color: var(--warn); }
+    .stat-card.ok .stat-value { color: var(--ok); }
+    .stat-card.info .stat-value { color: var(--accent); }
+
+    .stat-name { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; }
+
+    /* Section titles */
+    .section { margin-bottom: 28px; }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-title::before {
+      content: '';
+      display: block;
+      width: 3px;
+      height: 14px;
+      background: var(--accent);
+      border-radius: 2px;
+    }
+
+    /* Members table */
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .data-table thead tr {
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .data-table th {
+      padding: 12px 16px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+    }
+
+    .data-table td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+    }
+
+    .data-table tbody tr:last-child td { border-bottom: none; }
+
+    .data-table tbody tr {
+      transition: background 0.1s;
+    }
+
+    .data-table tbody tr:hover { background: var(--surface2); }
+
+    /* Badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .badge-critical { background: rgba(239,68,68,0.15); color: var(--critical); border: 1px solid rgba(239,68,68,0.3); }
+    .badge-high { background: rgba(249,115,22,0.15); color: var(--high); border: 1px solid rgba(249,115,22,0.3); }
+    .badge-medium { background: rgba(245,158,11,0.15); color: var(--medium); border: 1px solid rgba(245,158,11,0.3); }
+    .badge-low { background: rgba(16,185,129,0.15); color: var(--low); border: 1px solid rgba(16,185,129,0.3); }
+    .badge-admin { background: rgba(124,58,237,0.15); color: #a78bfa; border: 1px solid rgba(124,58,237,0.3); }
+    .badge-member { background: rgba(100,116,139,0.1); color: var(--muted); border: 1px solid var(--border); }
+
+    /* Violations list */
+    .violations-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .violation-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      border-left: 3px solid var(--border);
+      transition: transform 0.15s;
+    }
+
+    .violation-card:hover { transform: translateY(-2px); }
+    .violation-card.critical { border-left-color: var(--critical); }
+    .violation-card.high { border-left-color: var(--high); }
+    .violation-card.medium { border-left-color: var(--medium); }
+    .violation-card.low { border-left-color: var(--low); }
+
+    .violation-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .violation-policy { font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+    .violation-subject { font-size: 13px; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: var(--accent); }
+    .violation-message { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .violation-controls { font-size: 10px; color: var(--muted); margin-top: 8px; font-family: 'JetBrains Mono', monospace; }
+
+    /* Loading / empty */
+    .loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px;
+      color: var(--muted);
+      gap: 16px;
+    }
+
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty { text-align: center; padding: 48px; color: var(--muted); font-size: 13px; }
+    .empty-icon { font-size: 32px; margin-bottom: 12px; }
+
+    /* SSH section */
+    .ssh-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    /* Lifecycle chart */
+    .chart-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+    }
+
+    .chart-bars {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      height: 120px;
+      margin-top: 16px;
+    }
+
+    .chart-bar-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      height: 100%;
+      justify-content: flex-end;
+    }
+
+    .chart-bar {
+      width: 100%;
+      border-radius: 4px 4px 0 0;
+      transition: height 0.8s ease;
+      min-height: 4px;
+    }
+
+    .chart-bar-label { font-size: 10px; color: var(--muted); text-align: center; }
+    .chart-bar-val { font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 16px;
+      background: var(--surface);
+      padding: 4px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      width: fit-content;
+    }
+
+    .tab {
+      padding: 7px 16px;
+      border-radius: 7px;
+      border: none;
+      background: none;
+      color: var(--muted);
+      font-family: 'Syne', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .tab.active {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Error banner */
+    .error-banner {
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3);
+      color: var(--danger);
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 20px;
+      display: none;
+    }
+
+    /* Latency chart */
+    .latency-bars { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+    .latency-row { display: flex; align-items: center; gap: 12px; }
+    .latency-label { font-size: 12px; color: var(--muted); font-family: 'JetBrains Mono', monospace; width: 140px; flex-shrink: 0; }
+    .latency-track { flex: 1; background: var(--border); border-radius: 4px; height: 8px; overflow: hidden; }
+    .latency-fill { height: 100%; border-radius: 4px; transition: width 1s ease; }
+    .latency-val { font-size: 12px; font-family: 'JetBrains Mono', monospace; color: var(--text); width: 50px; text-align: right; }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🛡</div>
+      <div>
+        <div class="logo-text"><span>Sentinel</span>-IAM</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="status-dot" id="statusDot"></div>
+      <div class="org-input-wrap">
+        <span style="color:var(--muted);font-size:12px;font-family:'JetBrains Mono',monospace">org/</span>
+        <input type="text" id="orgInput" placeholder="your-github-org" />
+      </div>
+      <button class="btn btn-primary" id="auditBtn" onclick="runAudit()">Run Audit</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="error-banner" id="errorBanner"></div>
+
+    <div id="loadingState" class="loading" style="display:none">
+      <div class="spinner"></div>
+      <div>Auditing GitHub organization entitlements...</div>
+    </div>
+
+    <div id="dashboard" style="display:none">
+
+      <!-- Score + Stats -->
+      <div class="score-hero">
+        <div class="score-card">
+          <div class="score-ring">
+            <svg viewBox="0 0 140 140" width="140" height="140">
+              <circle class="score-ring-bg" cx="70" cy="70" r="58"/>
+              <circle class="score-ring-fill" id="scoreRing" cx="70" cy="70" r="58"
+                stroke-dasharray="364.4"
+                stroke-dashoffset="364.4"/>
+            </svg>
+            <div class="score-center">
+              <div class="score-number" id="scoreNum">--</div>
+              <div class="score-label">/ 100</div>
+            </div>
+          </div>
+          <div class="score-title">Compliance Score</div>
+        </div>
+
+        <div class="stat-grid">
+          <div class="stat-card danger">
+            <div class="stat-value" id="statCritical">0</div>
+            <div class="stat-name">Critical Risk Members</div>
+          </div>
+          <div class="stat-card warn">
+            <div class="stat-value" id="statStale">0</div>
+            <div class="stat-name">Stale Access Accounts</div>
+          </div>
+          <div class="stat-card info">
+            <div class="stat-value" id="statAdmins">0</div>
+            <div class="stat-name">Organization Admins</div>
+          </div>
+          <div class="stat-card danger">
+            <div class="stat-value" id="statViolations">0</div>
+            <div class="stat-name">Policy Violations</div>
+          </div>
+          <div class="stat-card warn">
+            <div class="stat-value" id="statOutside">0</div>
+            <div class="stat-name">Outside Collaborators</div>
+          </div>
+          <div class="stat-card ok">
+            <div class="stat-value" id="statMembers">0</div>
+            <div class="stat-name">Total Members</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('members')">Members</button>
+        <button class="tab" onclick="switchTab('violations')">Violations</button>
+        <button class="tab" onclick="switchTab('ssh')">SSH Keys</button>
+        <button class="tab" onclick="switchTab('lifecycle')">Lifecycle Trends</button>
+      </div>
+
+      <!-- Members Tab -->
+      <div class="tab-content active" id="tab-members">
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">Member Entitlements</div>
+            <div style="display:flex;gap:8px">
+              <select id="riskFilter" onchange="filterMembers()" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px;font-family:'Syne',sans-serif">
+                <option value="">All Risk Levels</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Login</th>
+                  <th>Role</th>
+                  <th>Last Active</th>
+                  <th>Days Inactive</th>
+                  <th>Teams</th>
+                  <th>Admin Repos</th>
+                  <th>Risk</th>
+                  <th>Violations</th>
+                </tr>
+              </thead>
+              <tbody id="membersBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Violations Tab -->
+      <div class="tab-content" id="tab-violations">
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">Policy Violations</div>
+          </div>
+          <div class="violations-grid" id="violationsGrid"></div>
+        </div>
+      </div>
+
+      <!-- SSH Tab -->
+      <div class="tab-content" id="tab-ssh">
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">SSH Key Health</div>
+          </div>
+          <div class="ssh-grid">
+            <div class="stat-card warn">
+              <div class="stat-value" id="sshStale">0</div>
+              <div class="stat-name">Members w/ Stale Keys</div>
+            </div>
+            <div class="stat-card danger">
+              <div class="stat-value" id="sshWeak">0</div>
+              <div class="stat-name">Members w/ Weak Algo</div>
+            </div>
+            <div class="stat-card warn">
+              <div class="stat-value" id="sshTotalStale">0</div>
+              <div class="stat-name">Total Stale Keys</div>
+            </div>
+            <div class="stat-card danger">
+              <div class="stat-value" id="sshTotalWeak">0</div>
+              <div class="stat-name">Total Weak Keys</div>
+            </div>
+          </div>
+          <div style="margin-top:16px">
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Login</th>
+                    <th>Total Keys</th>
+                    <th>Stale Keys</th>
+                    <th>Weak Algorithm</th>
+                    <th>Unverified</th>
+                    <th>Risk</th>
+                  </tr>
+                </thead>
+                <tbody id="sshBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lifecycle Trends Tab -->
+      <div class="tab-content" id="tab-lifecycle">
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">Identity Lifecycle Trends</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+            <div class="chart-wrap">
+              <div style="font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Risk Distribution</div>
+              <div class="chart-bars" id="riskChart"></div>
+            </div>
+            <div class="chart-wrap">
+              <div style="font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Lifecycle Event Latency (simulated)</div>
+              <div class="latency-bars" id="latencyBars"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /dashboard -->
+
+    <div id="emptyState" class="loading">
+      <div style="font-size:48px">🛡️</div>
+      <div style="font-size:16px;font-weight:600">Sentinel-IAM</div>
+      <div style="font-size:13px;color:var(--muted)">Enter your GitHub organization name and run an audit to get started.</div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  let auditData = null;
+  let allMembers = [];
+
+  async function runAudit() {
+    const org = document.getElementById('orgInput').value.trim();
+    if (!org) return;
+
+    const btn = document.getElementById('auditBtn');
+    btn.disabled = true;
+    btn.textContent = 'Auditing...';
+
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('loadingState').style.display = 'flex';
+    document.getElementById('errorBanner').style.display = 'none';
+
+    try {
+      const res = await fetch(`/api/audit?org=${encodeURIComponent(org)}`);
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || 'Audit failed');
+
+      auditData = data;
+      allMembers = data.members || [];
+      renderDashboard(data);
+
+      document.getElementById('loadingState').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+      document.getElementById('statusDot').className = 'status-dot live';
+    } catch (err) {
+      document.getElementById('loadingState').style.display = 'none';
+      document.getElementById('emptyState').style.display = 'flex';
+      const banner = document.getElementById('errorBanner');
+      banner.textContent = '⚠ ' + err.message;
+      banner.style.display = 'block';
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Run Audit';
+  }
+
+  function renderDashboard(data) {
+    const s = data.summary || {};
+
+    // Score ring
+    const score = data.compliance_score || 0;
+    const circumference = 364.4;
+    const offset = circumference - (score / 100) * circumference;
+    const ring = document.getElementById('scoreRing');
+    ring.style.strokeDashoffset = offset;
+    ring.style.stroke = score >= 90 ? '#10b981' : score >= 70 ? '#f59e0b' : '#ef4444';
+    document.getElementById('scoreNum').textContent = Math.round(score);
+    document.getElementById('scoreNum').style.color = score >= 90 ? '#10b981' : score >= 70 ? '#f59e0b' : '#ef4444';
+
+    // Stats
+    document.getElementById('statCritical').textContent = s.critical_risk || 0;
+    document.getElementById('statStale').textContent = s.stale_members || 0;
+    document.getElementById('statAdmins').textContent = s.admin_count || 0;
+    document.getElementById('statViolations').textContent = s.total_violations || 0;
+    document.getElementById('statOutside').textContent = s.outside_collaborators || 0;
+    document.getElementById('statMembers').textContent = s.total_members || 0;
+
+    renderMembers(allMembers);
+    renderViolations(data.violations || []);
+    renderSSH(data.ssh_summary || {}, data.ssh_members || []);
+    renderLifecycle(data.members || []);
+  }
+
+  function renderMembers(members) {
+    const tbody = document.getElementById('membersBody');
+    if (!members.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty"><div class="empty-icon">✓</div>No members found</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = members.map(m => `
+      <tr>
+        <td><a href="https://github.com/${m.login}" target="_blank" style="color:var(--accent);text-decoration:none">@${m.login}</a></td>
+        <td><span class="badge badge-${m.is_admin ? 'admin' : 'member'}">${m.role || (m.is_admin ? 'admin' : 'member')}</span></td>
+        <td>${m.last_active ? m.last_active.toString().slice(0,10) : '<span style="color:var(--danger)">never</span>'}</td>
+        <td style="color:${(m.days_since_active||0) > 90 ? 'var(--warn)' : 'var(--text)'}">${m.days_since_active ?? '—'}</td>
+        <td>${m.team_count || 0}</td>
+        <td style="color:${(m.repos_with_admin||0) > 5 ? 'var(--danger)' : 'var(--text)'}">${m.repos_with_admin || 0}</td>
+        <td><span class="badge badge-${m.risk_level}">${(m.risk_level||'low').toUpperCase()}</span></td>
+        <td style="color:${(m.violations?.length||0) > 0 ? 'var(--danger)' : 'var(--ok)'}">${m.violations?.length || 0}</td>
+      </tr>
+    `).join('');
+  }
+
+  function filterMembers() {
+    const filter = document.getElementById('riskFilter').value;
+    const filtered = filter ? allMembers.filter(m => m.risk_level === filter) : allMembers;
+    renderMembers(filtered);
+  }
+
+  function renderViolations(violations) {
+    const grid = document.getElementById('violationsGrid');
+    if (!violations.length) {
+      grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="empty-icon">✅</div>No policy violations detected</div>';
+      return;
+    }
+
+    grid.innerHTML = violations.map(v => `
+      <div class="violation-card ${v.severity}">
+        <div class="violation-header">
+          <div class="violation-policy">${v.policy_id} · ${v.policy_name}</div>
+          <span class="badge badge-${v.severity}">${v.severity}</span>
+        </div>
+        <div class="violation-subject">@${v.subject}</div>
+        <div class="violation-message">${v.message}</div>
+        <div class="violation-controls">
+          ${Object.entries(v.framework_controls || {}).map(([f,c]) => `${f}: ${c}`).join(' · ')}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function renderSSH(summary, members) {
+    document.getElementById('sshStale').textContent = summary.members_with_stale_keys || 0;
+    document.getElementById('sshWeak').textContent = summary.members_with_weak_keys || 0;
+    document.getElementById('sshTotalStale').textContent = summary.total_stale_keys || 0;
+    document.getElementById('sshTotalWeak').textContent = summary.total_weak_keys || 0;
+
+    const risky = members.filter(m => m.overall_risk && m.overall_risk !== 'none' && m.overall_risk !== 'low');
+    const tbody = document.getElementById('sshBody');
+
+    if (!risky.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty"><div class="empty-icon">🔑</div>No high-risk SSH keys detected</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = risky.map(m => `
+      <tr>
+        <td>@${m.login}</td>
+        <td>${m.total_keys}</td>
+        <td style="color:${m.stale_keys > 0 ? 'var(--warn)':'var(--ok)'}">${m.stale_keys}</td>
+        <td style="color:${m.weak_keys > 0 ? 'var(--danger)':'var(--ok)'}">${m.weak_keys}</td>
+        <td style="color:${m.unverified_keys > 0 ? 'var(--warn)':'var(--ok)'}">${m.unverified_keys}</td>
+        <td><span class="badge badge-${m.overall_risk}">${(m.overall_risk||'').toUpperCase()}</span></td>
+      </tr>
+    `).join('');
+  }
+
+  function renderLifecycle(members) {
+    // Risk distribution bar chart
+    const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+    members.forEach(m => { if (counts[m.risk_level] !== undefined) counts[m.risk_level]++; });
+    const maxCount = Math.max(...Object.values(counts), 1);
+
+    const colors = { critical: '#ef4444', high: '#f97316', medium: '#f59e0b', low: '#10b981' };
+    document.getElementById('riskChart').innerHTML = Object.entries(counts).map(([level, count]) => `
+      <div class="chart-bar-wrap">
+        <div class="chart-bar-val" style="color:${colors[level]}">${count}</div>
+        <div class="chart-bar" style="background:${colors[level]};height:${Math.max((count/maxCount)*100,4)}%"></div>
+        <div class="chart-bar-label">${level}</div>
+      </div>
+    `).join('');
+
+    // Lifecycle event latency (simulated p50/p95 values for dashboard)
+    const events = [
+      { name: 'Provisioning', p50: 1.2, p95: 3.8, color: '#00e5ff' },
+      { name: 'Access Review', p50: 0.8, p95: 2.1, color: '#7c3aed' },
+      { name: 'Deprovisioning', p50: 0.4, p95: 1.2, color: '#10b981' },
+      { name: 'SSO Auth', p50: 0.1, p95: 0.4, color: '#f59e0b' },
+      { name: 'Key Rotation', p50: 2.1, p95: 5.6, color: '#f97316' }
+    ];
+    const maxLatency = Math.max(...events.map(e => e.p95));
+
+    document.getElementById('latencyBars').innerHTML = events.map(e => `
+      <div>
+        <div class="latency-row">
+          <div class="latency-label">${e.name} p50</div>
+          <div class="latency-track"><div class="latency-fill" style="width:${(e.p50/maxLatency)*100}%;background:${e.color}"></div></div>
+          <div class="latency-val">${e.p50}s</div>
+        </div>
+        <div class="latency-row" style="margin-top:4px">
+          <div class="latency-label" style="color:var(--muted);font-size:10px">${e.name} p95</div>
+          <div class="latency-track"><div class="latency-fill" style="width:${(e.p95/maxLatency)*100}%;background:${e.color};opacity:0.5"></div></div>
+          <div class="latency-val" style="font-size:11px;color:var(--muted)">${e.p95}s</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function switchTab(name) {
+    document.querySelectorAll('.tab').forEach((t,i) => {
+      const names = ['members','violations','ssh','lifecycle'];
+      t.classList.toggle('active', names[i] === name);
+    });
+    document.querySelectorAll('.tab-content').forEach(c => {
+      c.classList.toggle('active', c.id === 'tab-' + name);
+    });
+  }
+
+  document.getElementById('orgInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') runAudit();
+  });
+</script>
+</body>
+</html>
