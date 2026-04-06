@@ -1,6 +1,6 @@
 source 'https://rubygems.org'
 
-ruby '>= 3.0.0'
+ruby '>= 3.1.0'
 
 # GitHub API
 gem 'octokit', '~> 7.0'
